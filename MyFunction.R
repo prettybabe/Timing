@@ -44,10 +44,10 @@ AdjustDate <- function(TradingDate, InfoPublicDate){
   return(NewDate)
 }
 
-AdjustUSA <- function(China, Use){
+AdjustUSA <- function(China, USA){
   NewDate <- vector()
   for(i in c(1:length(China))){
-    temp <- Use[Use[, 1] <= China[i], 2]
+    temp <- USA[USA[, 1] <= China[i], 2]
     NewDate[i] <- temp[length(temp)]
   }
   return(NewDate)
@@ -69,6 +69,16 @@ Score <- function(Data, ScoreNumber, IsMinusMean = 1){
     }
   }
   return(Score)
+}
+
+
+Count <- function(Data, Index, SumNumber = 8){
+  count <- ifelse(Data*Index > 0, 1, 0)
+  sumcount <- vector()
+  for(i in c(SumNumber:length(count))){
+      sumcount[i] <- sum(count[(i-SumNumber+1):i])
+  }
+  return(sumcount)
 }
 
 PlotCumlateReturn <- function(Data){
