@@ -47,8 +47,8 @@ AdjustDate <- function(TradingDate, InfoPublicDate){
 AdjustUSA <- function(China, USA){
   NewDate <- vector()
   for(i in c(1:length(China))){
-    temp <- USA[USA[, 1] <= China[i], 2]
-    NewDate[i] <- temp[length(temp)]
+    temp <- USA[USA[, 1] <= China[i], ]
+    NewDate[i] <- temp[nrow(temp), 2]
   }
   return(NewDate)
 }
@@ -94,11 +94,61 @@ PlotCumlateReturn <- function(Data){
   print(p)
 }
 
-TotalPerformance <- function(Data){
-  a <- melt(Data, id = c("Date")) %>%
-    group_by(variable) %>%
-    summarise(Return = exp(mean(log1p(value))*52) - 1,
-              SD = sd(value)*sqrt(52),
-              IR = Return/SD)
+
+YearlyReturn <- function(Data, kNumber){
+  Return = exp(mean(log1p(value))*kNumber) - 1
   return(a)
+}
+YearlySD <- function(Data, kNumber){
+  SD = sd(value)*sqrt(kNumber)
+  return(a)
+}
+
+
+TotalPerformance <- function(Data, kNumber){
+   output <- data.frame(Return = exp(mean(log1p(Data))*kNumber) - 1,
+              SD = sd(Data)*sqrt(kNumber)) %>%
+     mutate(IR = Return/SD, MaxDrowdown = MaxDropDownRatio(Data))
+  return(output)
+}
+
+YearPerformance <- function(Data, kNumber){
+  temp <- lapply(Data, TotalPerformance, kNumber)
+  output <- as.data.frame(lapply(temp, unlist))
+  return(output)
+}
+
+Performance <- function(Data, kNumber){
+  temp <- melt(Data, id = "Date") %>% mutate(Year = format(Date, "%Y")) %>%
+    group_by(Year, variable) %>%
+    summarise(Return = exp(mean(log1p(value))*kNumber) - 1,
+              SD = sd(value)*sqrt(kNumber),
+              IR = Return/SD, 
+              MaxDrowdown = MaxDropDownRatio(value)) %>%
+    ungroup()
+  
+  p1 <- hPlot(x = "Year", y = "Return", group = "variable", data = temp, type = "column")
+  p2 <- hPlot(x = "Year", y = "SD", group = "variable", data = temp, type = "column")
+  p3 <- hPlot(x = "Year", y = "IR", group = "variable", data = temp, type = "column")
+  p4 <- hPlot(x = "Year", y = "MaxDrowdown", group = "variable", data = temp, type = "column")
+
+  print(p1)
+  print(p2)
+  print(p3)
+  print(p4)
+}
+
+
+MaxDropDownRatio <-  function(returns){
+  maxdropdown <- 0
+  cum.return <- cumsum(log1p(returns))
+  kNumber <- length(cum.return)
+  if(maxdropdown > cum.return[1]) maxdropdown <- cum.return[1]
+  
+  for(i in c(2:kNumber)){
+    temp <- cum.return[i] - max(cum.return[1:i])
+    if(maxdropdown >  temp) maxdropdown <- temp
+  }
+  maxdropdown <- exp(maxdropdown) - 1
+  return(maxdropdown)
 }

@@ -1,4 +1,4 @@
-setwd("E:\\working\\Timing")
+setwd("D:\\working\\Timing")
 options(java.parameters="-Xmx4g")
 library(RSQLServer)
 library(dplyr)
@@ -9,9 +9,13 @@ library(TTR)
 library(rCharts) 
 library(xlsx)
 
-source('E:/working/Timing/MyFunction.R')
-tradingDay <- read.csv("TradingDay.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
-tradingDay$TradingDate <- as.Date(tradingDay$TradingDate)
+source('D:/working/Timing/MyFunction.R')
+channel <- src_sqlserver(server="SQL",database="XY",user="libo.jin",password="123456")
+tradingDay <- tbl(channel, "QT_TradingDayNew") %>%
+  filter(SecuMarket == 83L, IfTradingDay==1L) %>%
+  select(TradingDate, IfWeekEnd, IfMonthEnd, IfQuarterEnd, IfYearEnd) %>%
+  collect %>%
+  mutate(TradingDate = as.Date(TradingDate))
 #############################################################################################################
 #  原始数据 
 data <- list()
@@ -183,27 +187,6 @@ data_week$MinusMean <- data_day$Volatility %>%
 #########################################################################################################
 # 
 
-score <- data.frame(Date = data_week$UnMinusMean$Date, 
-                    data.frame(lapply(data_week$UnMinusMean[, -1], Score, ScoreNumber = 8, IsMinusMean = 0)),
-                    data.frame(lapply(data_week$MinusMean[, -1], Score, ScoreNumber = 8, IsMinusMean = 1))) %>%
-  mutate(PMI = AdjustUSA(Date, select(data_month$PMI, AdjustInfoPublicDate, PMIScore)),
-         PMIChange = AdjustUSA(Date, select(data_month$PMI, AdjustInfoPublicDate, PMIChangeScore)),
-         CPI = AdjustUSA(Date, select(data_month$CPI, AdjustInfoPublicDate, CPIScore)),
-         PPI = AdjustUSA(Date, select(data_month$PPI, AdjustInfoPublicDate, PPIScore)),
-         M2 = AdjustUSA(Date, select(data_month$M2, AdjustInfoPublicDate, M2Score)),
-         IP = AdjustUSA(Date, select(data_month$IP, AdjustInfoPublicDate, IPScore)))
-
-temp <- score %>% 
-  select(Date) %>%
-  left_join(date_weekly, by = c("Date" = "TradingDay")) %>%
-  left_join(return_weekly, by = c("ForecastDay" = "Date"))
-  
-sumcount <- data.frame(Date = temp$Date,
-                       data.frame(lapply(score[, -1], Count, temp$Return, SumNumber = 8))) 
-
-
-
-
 weight <- data.frame(Momentum15D = 1, SP = 0.5, Nasdaq = 0.5,
                      Volatility5D = 0.75, Volatility10D = 0.25,
                      EP = 0.5, BP = 0.5,
@@ -218,6 +201,32 @@ weight <- data.frame(Momentum15D = 1, SP = 0.5, Nasdaq = 0.5,
                      M2 = 0.5, IP = 1)
 
 
+score <- data.frame(Date = data_week$UnMinusMean$Date, 
+                    data.frame(lapply(data_week$UnMinusMean[, -1], Score, ScoreNumber = 8, IsMinusMean = 0)),
+                    data.frame(lapply(data_week$MinusMean[, -1], Score, ScoreNumber = 8, IsMinusMean = 1))) %>%
+  mutate(PMI = AdjustUSA(Date, select(data_month$PMI, AdjustInfoPublicDate, PMIScore)),
+         PMIChange = AdjustUSA(Date, select(data_month$PMI, AdjustInfoPublicDate, PMIChangeScore)),
+         CPI = AdjustUSA(Date, select(data_month$CPI, AdjustInfoPublicDate, CPIScore)),
+         PPI = AdjustUSA(Date, select(data_month$PPI, AdjustInfoPublicDate, PPIScore)),
+         M2 = AdjustUSA(Date, select(data_month$M2, AdjustInfoPublicDate, M2Score)),
+         IP = AdjustUSA(Date, select(data_month$IP, AdjustInfoPublicDate, IPScore)))
+
+temp <-  melt(score, id = "Date", value.name = "Score") %>%
+  left_join(melt(weight, value.name = "Weight"), by = "variable") %>%
+  mutate(Forecast = Score * Weight) %>%
+  select(Date, variable, Forecast)
+temp_score <- date_weekly %>%
+  inner_join(dcast(temp, Date ~ variable), by = c("TradingDay" = "Date"))
+
+
+temp_return <- temp_score %>% 
+  select(ForecastDay) %>%
+  left_join(return_weekly, by = c("ForecastDay" = "Date"))
+
+sumcount <- data.frame(Date = temp_score$ForecastDay,
+                       data.frame(lapply(temp_score[, -c(1,2)], Count, temp_return$Return, SumNumber = 8))) 
+
+
 
 score <- melt(score, id = "Date", value.name = "Score")
 sumcount <- melt(sumcount, id = "Date", value.name = "Count")
@@ -227,6 +236,27 @@ forecast <- score %>%
   left_join(sumcount, by = c("Date", "variable")) %>%
   left_join(weight, by = "variable") %>%
   group_by(Date) %>%
-  summarise(Forecast = sum(Score*Count*Weight, na.rm = TRUE),
-            Count = sum(!is.na(Score*Count*Weight)))
-  
+  summarise(ForecastScore = sum(Score*Count*Weight, na.rm = TRUE)/sum(!is.na(Score)&!is.na(Count)&Weight!=0)) %>%
+  left_join(date_weekly, by = c("Date" = "TradingDay")) %>%
+  left_join(return_weekly, by = c("ForecastDay" = "Date")) %>%
+  select(Date = ForecastDay, ForecastScore, Return)
+
+returns <- forecast %>%
+  filter(!is.na(ForecastScore) & !is.na(Return)) %>% 
+  arrange(Date) %>%
+  mutate(LongOnly = ifelse(ForecastScore > 0, Return, 0),
+         LongShort = ifelse(ForecastScore > 0, Return, -Return)) %>% 
+  select(-ForecastScore) %>% 
+  rename(CSI300 = Return)
+
+PlotCumlateReturn(returns %>% filter(Date >= as.Date("2007-01-01")))
+
+
+Year <- returns %>%
+  filter(Date >= as.Date("2007-01-01")) %>%
+  mutate(Year = format(Date, "%Y")) %>%
+  select(-Date)
+by(tempYearReturn %>% select(-Year), tempYearReturn$Year, YearPerformance, 52)
+
+Performance(returns %>% filter(Date >= as.Date("2007-01-01")), 52)
+
