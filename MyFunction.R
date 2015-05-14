@@ -96,14 +96,19 @@ PlotCumlateReturn <- function(Data){
 
 
 YearlyReturn <- function(Data, kNumber){
-  Return = exp(mean(log1p(value))*kNumber) - 1
-  return(a)
+  Return = exp(mean(log1p(Data))*kNumber) - 1
+  return(Return)
 }
 YearlySD <- function(Data, kNumber){
-  SD = sd(value)*sqrt(kNumber)
-  return(a)
+  SD = sd(Data)*sqrt(kNumber)
+  return(SD)
 }
-
+YearlyIR <- function(Data, kNumber){
+  Return = exp(mean(log1p(Data))*kNumber) - 1
+  SD = sd(Data)*sqrt(kNumber)
+  IR = Return/SD
+  return(IR)
+}
 
 TotalPerformance <- function(Data, kNumber){
    output <- data.frame(Return = exp(mean(log1p(Data))*kNumber) - 1,
@@ -116,6 +121,13 @@ YearPerformance <- function(Data, kNumber){
   temp <- lapply(Data, TotalPerformance, kNumber)
   output <- as.data.frame(lapply(temp, unlist))
   return(output)
+}
+
+Probably <- function(Data){
+  temp <- ifelse(Data > 0, 1, 0) 
+  count <- data.frame(AllNumber = length(temp), RightNumber = sum(temp)) %>%
+    mutate(WinPro = RightNumber/AllNumber)
+  return(count)
 }
 
 Performance <- function(Data, kNumber){
@@ -151,4 +163,63 @@ MaxDropDownRatio <-  function(returns){
   }
   maxdropdown <- exp(maxdropdown) - 1
   return(maxdropdown)
+}
+
+Show <- function(forecast, index, date, knumber = 52){
+  names(forecast) <- c("Date", "Score")
+  names(index) <- c("Date", "Return")
+  names(date) <- c("Date", "ForecastDate")
+  
+  returns <- forecast %>%
+    filter(!is.na(Score)) %>%
+    left_join(date, by = "Date") %>%
+    left_join(index, by = c("ForecastDate" = "Date")) %>%
+    arrange(Date) %>%
+    mutate(LongOnly = ifelse(Score > 0, Return, 0),
+           LongShort = ifelse(Score > 0, Return, -Return)) %>%
+    filter(!is.na(Return))
+  
+  PlotCumlateReturn(returns %>% select(Date = ForecastDate, Index = Return, LongOnly, LongShort))
+  a <- YearPerformance(returns %>% select(Index = Return, LongOnly, LongShort), 52)
+  cat("Summary\n\n")
+  print(a)
+  cat("\n\n")
+  
+  temp <- returns %>% 
+    mutate(Forecast = Score * Return) %>%
+    select(Forecast)
+  
+  cat("胜率\n\n")
+  print(Probably(temp))
+  cat("\n\n")
+  
+  
+  Year <- returns %>%
+    select(Date = ForecastDate, Return, LongOnly, LongShort) %>%
+    mutate(Year = format(Date, "%Y")) %>%
+    select(-Date)
+  
+  Year <- melt(Year, id = "Year")
+  YearReturn <- Year %>% 
+    group_by(Year, variable) %>%
+    summarise(Return = YearlyReturn(value, 52)) %>%
+    ungroup()
+  YearReturn <- dcast(YearReturn, Year ~ variable) %>%
+    rename(Index = Return)
+
+  YearIR <- Year %>% 
+    group_by(Year, variable) %>%
+    summarise(IR = YearlyIR(value, 52)) %>%
+    ungroup()
+  YearIR <- dcast(YearIR, Year ~ variable) %>%
+    rename(Index = Return)
+  
+  cat("Return\n\n")
+  print(YearReturn)
+  cat("\n\n")
+  cat("IR\n\n")
+  print(YearIR)
+  cat("\n\n")
+ 
+  Performance(returns %>%  select(Date = ForecastDate, Return, LongOnly, LongShort), knumber)
 }

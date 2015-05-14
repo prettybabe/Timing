@@ -249,14 +249,26 @@ returns <- forecast %>%
   select(-ForecastScore) %>% 
   rename(CSI300 = Return)
 
-PlotCumlateReturn(returns %>% filter(Date >= as.Date("2007-01-01")))
 
+
+PlotCumlateReturn(returns %>% filter(Date >= as.Date("2007-01-01")))
+as.data.frame(lapply(lapply(returns %>% filter(Date >= as.Date("2007-01-01")) %>% select(-Date), TotalPerformance, 52), unlist))
+temp <- forecast %>% 
+  mutate(Forecast = ForecastScore * Return) %>%
+  filter(Date >= as.Date("2007-01-01"),!is.na(Forecast)) %>%
+  select(Forecast)
+Probably(temp)
 
 Year <- returns %>%
   filter(Date >= as.Date("2007-01-01")) %>%
   mutate(Year = format(Date, "%Y")) %>%
   select(-Date)
-by(tempYearReturn %>% select(-Year), tempYearReturn$Year, YearPerformance, 52)
+by(Year %>% select(-Year), Year$Year, YearPerformance, 52)
 
 Performance(returns %>% filter(Date >= as.Date("2007-01-01")), 52)
+
+#####################################################################################################
+
+
+
 
