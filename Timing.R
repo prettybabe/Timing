@@ -226,8 +226,6 @@ temp_return <- temp_score %>%
 sumcount <- data.frame(Date = temp_score$ForecastDay,
                        data.frame(lapply(temp_score[, -c(1,2)], Count, temp_return$Return, SumNumber = 8))) 
 
-
-
 score <- melt(score, id = "Date", value.name = "Score")
 sumcount <- melt(sumcount, id = "Date", value.name = "Count")
 weight <- melt(weight, value.name = "Weight")
@@ -241,31 +239,7 @@ forecast <- score %>%
   left_join(return_weekly, by = c("ForecastDay" = "Date")) %>%
   select(Date = ForecastDay, ForecastScore, Return)
 
-returns <- forecast %>%
-  filter(!is.na(ForecastScore) & !is.na(Return)) %>% 
-  arrange(Date) %>%
-  mutate(LongOnly = ifelse(ForecastScore > 0, Return, 0),
-         LongShort = ifelse(ForecastScore > 0, Return, -Return)) %>% 
-  select(-ForecastScore) %>% 
-  rename(CSI300 = Return)
-
-
-
-PlotCumlateReturn(returns %>% filter(Date >= as.Date("2007-01-01")))
-as.data.frame(lapply(lapply(returns %>% filter(Date >= as.Date("2007-01-01")) %>% select(-Date), TotalPerformance, 52), unlist))
-temp <- forecast %>% 
-  mutate(Forecast = ForecastScore * Return) %>%
-  filter(Date >= as.Date("2007-01-01"),!is.na(Forecast)) %>%
-  select(Forecast)
-Probably(temp)
-
-Year <- returns %>%
-  filter(Date >= as.Date("2007-01-01")) %>%
-  mutate(Year = format(Date, "%Y")) %>%
-  select(-Date)
-by(Year %>% select(-Year), Year$Year, YearPerformance, 52)
-
-Performance(returns %>% filter(Date >= as.Date("2007-01-01")), 52)
+Show(forecast, return_weekly, date_weekly, knumber = 52)
 
 #####################################################################################################
 
