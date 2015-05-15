@@ -91,7 +91,7 @@ PlotCumlateReturn <- function(Data){
   
   p <- hPlot(x = "Date", y = "CumulateReturn", data = a , type = "line", group = "variable")
   p$xAxis(type = 'datetime', labels = list(format = '{value:%Y-%M-%d}' ))
-  print(p)
+  return(p)
 }
 
 
@@ -179,7 +179,9 @@ Show <- function(forecast, index, date, knumber = 52){
            LongShort = ifelse(Score > 0, Return, -Return)) %>%
     filter(!is.na(Return))
   
-  PlotCumlateReturn(returns %>% select(Date = ForecastDate, Index = Return, LongOnly, LongShort))
+  
+  p <- PlotCumlateReturn(returns %>% select(Date = ForecastDate, Index = Return, LongOnly, LongShort))
+  print(p)
   a <- YearPerformance(returns %>% select(Index = Return, LongOnly, LongShort), 52)
   cat("Summary\n\n")
   print(a)
@@ -223,3 +225,84 @@ Show <- function(forecast, index, date, knumber = 52){
  
   Performance(returns %>%  select(Date = ForecastDate, Return, LongOnly, LongShort), knumber)
 }
+
+
+PerformanceCompare <- function(forecast, index, date, knumber = 52){
+  names(index) <- c("Date", "Return")
+  names(date) <- c("Date", "ForecastDate")
+  
+  LongOnly <- function(forecast, Return){
+    temp <- data.frame(Forecast = forecast, Return = Return)
+    returns <- temp %>%
+      mutate(LongOnly = ifelse(Forecast > 0, Return, 0))
+    return(returns$LongOnly)
+  }
+  
+  LongShort <- function(forecast, Return){
+    temp <- data.frame(Forecast = forecast, Return = Return)
+    returns <- temp %>%
+      mutate(LongShort = ifelse(Forecast > 0, Return, -Return))
+    return(returns$LongShort)
+  }
+  
+  Win <- function(forecast, index){
+    temp <- ifelse(forecast * index > 0, 1, 0)
+    winpro <- sum(temp)/length(temp)
+    return(winpro)
+  }
+  
+
+  temp <- forecast %>%
+    left_join(date, by = "Date") %>%
+    left_join(index, by = c("ForecastDate" = "Date")) 
+  temp <- na.omit(temp)
+  
+  
+  temp_forecast <- temp %>% select(-Date, -ForecastDate, -Return) 
+  temp_index <- temp$Return
+  longonly <- data.frame(Date = temp$ForecastDate,
+                         as.data.frame(lapply(temp_forecast, LongOnly, temp_index)))
+  
+  longshort <- data.frame(Date = temp$ForecastDate,
+                          as.data.frame(lapply(temp_forecast, LongShort, temp_index)))
+  
+  winpro <- as.data.frame(lapply(temp_forecast, Win, temp_index))
+  
+  year_return_longonly <- as.data.frame(lapply(longonly %>% select(-Date), YearlyReturn, knumber))
+  year_sd_longonly <- as.data.frame(lapply(longonly %>% select(-Date), YearlySD, knumber))
+  year_ir_longonly <- as.data.frame(lapply(longonly %>% select(-Date), YearlyIR, knumber))
+  
+  a <- rbind(year_return_longonly, year_sd_longonly, year_ir_longonly)
+  row.names(a) <- c("Return", "SD", "IR")
+  
+  
+  year_return_longshort <- as.data.frame(lapply(longshort %>% select(-Date), YearlyReturn, knumber))
+  year_sd_longshort <- as.data.frame(lapply(longshort %>% select(-Date), YearlySD, knumber))
+  year_ir_longshort <- as.data.frame(lapply(longshort %>% select(-Date), YearlyIR, knumber))
+  b <- rbind(year_return_longshort, year_sd_longshort, year_ir_longshort)
+  row.names(b) <- c("Return", "SD", "IR")
+  
+  p1 <- PlotCumlateReturn(longonly)
+  p1$title(text = "LongOnly")
+  print(p1)
+  p2 <- PlotCumlateReturn(longshort)
+  p2$title(text = "LongShort")
+  print(p2)
+  
+  cat("胜率\n")
+  print(winpro)
+  
+  cat("\n")
+  cat("LongOnly\n")
+  print(a)
+  
+  cat("\n")
+  cat("LongShort\n")
+  print(b)
+}
+
+
+
+
+
+

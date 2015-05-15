@@ -239,7 +239,7 @@ forecast <- score %>%
   left_join(return_weekly, by = c("ForecastDay" = "Date")) %>%
   select(Date = ForecastDay, ForecastScore, Return)
 
-Show(forecast, return_weekly, date_weekly, knumber = 52)
+Show(forecast %>% filter(Date >= as.Date("2007-01-01")), return_weekly, date_weekly, knumber = 52)
 
 #####################################################################################################
 
